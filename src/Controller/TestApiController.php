@@ -16,28 +16,30 @@ use Symfony\Component\Validator\Validator\ValidatorInterface;
 
 class TestApiController extends AbstractController
 {
-    const PDO_EXCEPTION_CODE = '23000';
-
-    private $validator;
     private $serializer;
     private $em;
+    private $validator;
+    private $cars = [];
+    private $rentals = []; 
+
+    public function __construct(SerializerInterface $serializer, EntityManagerInterface $em,  ValidatorInterface $validator)
+    {
+        $this->serializer = $serializer;
+        $this->em = $em;
+        $this->validator = $validator;
+    }
    
     /**
      * @Route("/api/level1", name="level1", methods={"POST"})
      */
-    public function level1(Request $request, SerializerInterface $serializer, EntityManagerInterface $em,  ValidatorInterface $validator): Response
+    public function level1(Request $request): Response
     {
-        $this->validator = $validator;
-        $this->serializer = $serializer;
-        $this->em = $em;
-        $this->cars = [];
-        $this->rentals = [];
         // Normalization of the request
         $data = json_decode($request->getContent(), true);
 
         try {
 
-            $this->CheckAndPersistData($data);
+            $this->CheckData($data);
 
             $response = [];
 
@@ -45,7 +47,8 @@ class TestApiController extends AbstractController
                 $startDate = new DateTime($rental->getStartDate());
                 $endDate = new DateTime($rental->getEndDate());
                 
-                $rentalDays = $endDate->diff($startDate)->format("%a");
+                // Number of the rental days with the last day inclued
+                $rentalDays = $endDate->diff($startDate)->format("%a") + 1;
 
                 $price = $rentalDays * $rental->getCar()->getPricePerDay() + $rental->getDistance() * $rental->getCar()->getPricePerKm();
                 
@@ -61,21 +64,9 @@ class TestApiController extends AbstractController
                 'rentals' => $response
             ]);
 
-        } catch (UniqueConstraintViolationException $e) {
-            return $this->json([
-                'error' => $e->getMessage()
-            ], 500);
-        }
-        catch (\Exception $e) {
+        } catch (\Exception $e) {
             
             switch ($e->getCode()) {
-                case $this::PDO_EXCEPTION_CODE:
-                    
-                    return $this->json([
-                        'error' => $e->getMessage()
-                    ], 500);
-
-                    break;
                 
                 default:
                     return $this->json([
@@ -87,7 +78,15 @@ class TestApiController extends AbstractController
         }
     }
 
-    private function CheckAndPersistData(Array $data)
+    /**
+     * @Route("/api/level2", name="level2", methods={"POST"})
+     */
+    public function level2(Request $request)
+    {
+
+    }
+
+    private function CheckData(Array $data)
     {
         // Check the request
         $this->checkRequestBody($data);
@@ -99,8 +98,7 @@ class TestApiController extends AbstractController
             $this->cars[$jsonCarkey] = $this->serializer->deserialize(json_encode($jsonCar), Car::class, 'json');
 
             $this->checkFormatErrors($this->cars[$jsonCarkey]);
-            
-            $this->em->persist($this->cars[$jsonCarkey]);
+
         }
         
         // Creation of an array containing Rental objects
@@ -117,12 +115,7 @@ class TestApiController extends AbstractController
 
             $this->checkFormatErrors($this->rentals[$jsonRentalKey]);
             
-            $this->em->persist($this->rentals[$jsonRentalKey]);
         }
-
-        // Execution of the queries to persist data if everything is ok
-        $result = $this->em->flush();
-
     }
 
     private function checkFormatErrors(Object $object)
