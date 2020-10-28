@@ -44,6 +44,7 @@ class TestApiController extends AbstractController
             $response = [];
 
             foreach ($this->rentals as $rentalKey => $rental) {
+
                 $startDate = new DateTime($rental->getStartDate());
                 $endDate = new DateTime($rental->getEndDate());
                 
@@ -66,14 +67,9 @@ class TestApiController extends AbstractController
 
         } catch (\Exception $e) {
             
-            switch ($e->getCode()) {
-                
-                default:
-                    return $this->json([
-                        'error' => $e->getMessage()
-                    ], 400);
-                    break;
-            }
+            return $this->json([
+                'error' => $e->getMessage()
+            ], 400);
 
         }
     }
@@ -83,7 +79,60 @@ class TestApiController extends AbstractController
      */
     public function level2(Request $request)
     {
+        // Normalization of the request
+        $data = json_decode($request->getContent(), true);
 
+        try {
+
+            $this->CheckData($data);
+
+            $response = [];
+            $discount = 0;
+
+            foreach ($this->rentals as $rentalKey => $rental) {
+
+                $startDate = new DateTime($rental->getStartDate());
+                $endDate = new DateTime($rental->getEndDate());
+                
+                // Rental days with the last day inclued
+                $rentalDays = $endDate->diff($startDate)->format("%a") + 1;
+
+                // Computation of the total rental price
+
+                // Depending on the rental days there is a promotion
+                // 1 day => 10% 
+                // 4 days => 30%
+                // 10 days => 50%
+                if($rentalDays > 1) $discount = 0.1;
+                if($rentalDays > 4) $discount = 0.3;
+                if($rentalDays > 10) $discount = 0.5;
+            
+                $pricePerDay = $rentalDays * $rental->getCar()->getPricePerDay() * ( 1 - $discount);
+                
+                $pricePerKm = $rental->getDistance() * $rental->getCar()->getPricePerKm();
+                
+                $price = $pricePerDay + $pricePerKm;
+                
+                
+                $rentalResponse = array(
+                    "id" => $rental->getId(),
+                    "price" => $price
+                );
+
+                array_push($response, $rentalResponse);
+            }
+
+            return $this->json([
+                'rentals' => $response
+            ]);
+
+        } catch (\Exception $e) {
+            
+            return $this->json([
+                'error' => $e->getMessage()
+            ], 400);
+
+        }
     }
 
     private function CheckData(Array $data)
