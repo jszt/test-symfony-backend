@@ -6,9 +6,7 @@ use App\Repository\RentalRepository;
 use Doctrine\Common\Collections\ArrayCollection;
 use Doctrine\Common\Collections\Collection;
 use Doctrine\ORM\Mapping as ORM;
-use PhpParser\Node\Expr\Cast\Array_;
 use Symfony\Component\Validator\Constraints as Assert;
-use Symfony\Component\Serializer\Annotation\Groups;
 
 /**
  * @ORM\Entity(repositoryClass=RentalRepository::class)
@@ -63,9 +61,15 @@ class Rental
      */
     private $actions;
 
+    /**
+     * @ORM\ManyToMany(targetEntity=Option::class, mappedBy="rentals")
+     */
+    private $options;
+
     public function __construct()
     {
         $this->actions = new ArrayCollection();
+        $this->options = new ArrayCollection();
     }
 
     public function getId(): ?int
@@ -146,13 +150,6 @@ class Rental
         return $this;
     }
 
-    public function setActions(Array $actions): self
-    {
-        $this->actions = $actions;
-
-        return $this;
-    }
-
     public function removeAction(Action $action): self
     {
         if ($this->actions->removeElement($action)) {
@@ -160,6 +157,33 @@ class Rental
             if ($action->getRental() === $this) {
                 $action->setRental(null);
             }
+        }
+
+        return $this;
+    }
+
+    /**
+     * @return Collection|Option[]
+     */
+    public function getOptions(): Collection
+    {
+        return $this->options;
+    }
+
+    public function addOption(Option $option): self
+    {
+        if (!$this->options->contains($option)) {
+            $this->options[] = $option;
+            $option->addRental($this);
+        }
+
+        return $this;
+    }
+
+    public function removeOption(Option $option): self
+    {
+        if ($this->options->removeElement($option)) {
+            $option->removeRental($this);
         }
 
         return $this;
