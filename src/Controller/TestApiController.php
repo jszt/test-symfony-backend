@@ -135,6 +135,86 @@ class TestApiController extends AbstractController
         }
     }
 
+    /**
+     * @Route("/api/level3", name="level3", methods={"POST"})
+     */
+    public function level3(Request $request)
+    {
+        // Normalization of the request
+        $data = json_decode($request->getContent(), true);
+
+        try {
+
+            $this->CheckData($data);
+
+            $response = [];
+            $discount = 0;
+
+            foreach ($this->rentals as $rentalKey => $rental) {
+
+                $startDate = new DateTime($rental->getStartDate());
+                $endDate = new DateTime($rental->getEndDate());
+                
+                // Rental days with the last day inclued
+                $rentalDays = $endDate->diff($startDate)->format("%a") + 1;
+
+                // Computation of the total rental price
+
+                // Depending on the rental days there is a promotion
+                // 1 day => 10% 
+                // 4 days => 30%
+                // 10 days => 50%
+                if($rentalDays > 1) $discount = 0.1;
+                if($rentalDays > 4) $discount = 0.3;
+                if($rentalDays > 10) $discount = 0.5;
+            
+                $pricePerDay = $rentalDays * $rental->getCar()->getPricePerDay() * ( 1 - $discount);
+                
+                $pricePerKm = $rental->getDistance() * $rental->getCar()->getPricePerKm();
+                
+                $price = $pricePerDay + $pricePerKm;
+
+                // Compute commission
+                // 30% of the price
+                $commission = $price * 0.3;
+                
+                // Half goes to the insurance
+                $insuranceCommission = $commission * 0.5;
+
+                // 1€/day goes to the roadside assistance
+                $raCommission = (100 * $rentalDays);
+
+                // The rest goes to us
+                $ourCommission = $commission - ($insuranceCommission + $raCommission);
+                
+                $commissionArray = array(
+                    "insurance_fee" => $insuranceCommission,
+                    "assistance_fee" => $raCommission,
+                    "our_fee" => $ourCommission
+                );
+                
+                $rentalResponse = array(
+                    "id" => $rental->getId(),
+                    "price" => $price,
+                    "commision" => $commissionArray
+                );
+
+                array_push($response, $rentalResponse);
+            }
+
+            return $this->json([
+                'rentals' => $response
+            ]);
+
+        } catch (\Exception $e) {
+            
+            return $this->json([
+                'error' => $e->getMessage()
+            ], 400);
+
+        }
+    }
+
     private function CheckData(Array $data)
     {
         // Check the request
