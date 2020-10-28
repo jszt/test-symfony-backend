@@ -2,11 +2,13 @@
 
 namespace App\Controller;
 
+use App\Entity\Action;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Annotation\Route;
 use Symfony\Component\Serializer\SerializerInterface;
+use Symfony\Component\Serializer\Normalizer\AbstractNormalizer;
 use App\Entity\Car;
 use App\Entity\Rental;
 use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
@@ -20,13 +22,21 @@ class TestApiController extends AbstractController
     private $em;
     private $validator;
     private $cars = [];
-    private $rentals = []; 
+    private $rentals = [];
+    private $actors;
 
     public function __construct(SerializerInterface $serializer, EntityManagerInterface $em,  ValidatorInterface $validator)
     {
         $this->serializer = $serializer;
         $this->em = $em;
         $this->validator = $validator;
+        $this->actors =  array(
+            'driver',
+            'owner',
+            'insurance',
+            'assistance',
+            'our_company'
+        );
     }
    
     /**
@@ -215,6 +225,108 @@ class TestApiController extends AbstractController
         }
     }
 
+    /**
+     * @Route("/api/level4", name="level4", methods={"POST"})
+     */
+    public function level4(Request $request)
+    {
+        // Normalization of the request
+        $data = json_decode($request->getContent(), true);
+
+        try {
+
+            $this->CheckData($data);
+
+            $response = [];
+            $discount = 0;
+
+            foreach ($this->rentals as $rentalKey => $rental) {
+
+                $startDate = new DateTime($rental->getStartDate());
+                $endDate = new DateTime($rental->getEndDate());
+                
+                // Rental days with the last day inclued
+                $rentalDays = $endDate->diff($startDate)->format("%a") + 1;
+
+                // Computation of the total rental price
+
+                // Depending on the rental days there is a promotion
+                // 1 day => 10% 
+                // 4 days => 30%
+                // 10 days => 50%
+                if($rentalDays > 1) $discount = 0.1;
+                if($rentalDays > 4) $discount = 0.3;
+                if($rentalDays > 10) $discount = 0.5;
+            
+                $pricePerDay = $rentalDays * $rental->getCar()->getPricePerDay() * ( 1 - $discount);
+                
+                $pricePerKm = $rental->getDistance() * $rental->getCar()->getPricePerKm();
+                
+                $price = $pricePerDay + $pricePerKm;
+
+                // Compute commission
+                // 30% of the price
+                $commission = $price * 0.3;
+                
+                // Half goes to the insurance
+                $insuranceCommission = $commission * 0.5;
+
+                // 1€/day goes to the roadside assistance
+                $raCommission = (100 * $rentalDays);
+
+                // The rest goes to us
+                $ourCommission = $commission - ($insuranceCommission + $raCommission);
+
+                // Creation of the actions
+                $actions = [];
+                foreach ($this->actors as $actorKey => $actor) {
+                    switch ($actor) {
+                        case 'driver':
+                            $newAction = new Action($actor, 'debit', $price, $rental);
+                            array_push($actions, $this->createAction($newAction, $rental));
+                        break;
+                        case 'owner':
+                            $newAction = new Action($actor, 'credit', $price - $commission, $rental);
+                            array_push($actions, $this->createAction($newAction, $rental));
+                        break;
+                        case 'insurance':
+                            $newAction = new Action($actor, 'credit', $insuranceCommission, $rental);
+                            array_push($actions, $this->createAction($newAction, $rental));
+                        break;
+                        case 'assistance':
+                            $newAction = new Action($actor, 'credit', $raCommission, $rental);
+                            array_push($actions, $this->createAction($newAction, $rental));
+                        break;
+                        case 'our_company':
+                            $newAction = new Action($actor, 'credit', $ourCommission, $rental);
+                            array_push($actions, $this->createAction($newAction, $rental));
+                        break;
+                    }
+                }
+
+                $rentalResponse = array(
+                    "id" => $rental->getId(),
+                    "actions" => $actions
+                );
+
+                array_push($response, $rentalResponse);
+            }
+
+           // dd($response);
+
+            return $this->json([
+                'rentals' => $response
+            ]);
+
+        } catch (\Exception $e) {
+            
+            return $this->json([
+                'error' => $e->getMessage()
+            ], 400);
+
+        }
+    }
+
     private function CheckData(Array $data)
     {
         // Check the request
@@ -256,6 +368,21 @@ class TestApiController extends AbstractController
     private function checkRequestBody(Array $body)
     {
         if(!isset($body['cars']) || !isset($body['rentals'])) throw new \Exception('Invalid request body');
+    }
+
+    private function createAction(Action $newAction, Rental $rental)
+    {
+        $this->checkFormatErrors($newAction);
+
+        $action = array(
+            'who' => $newAction->getActor(),
+            'type' => $newAction->getType(),
+            'amount' => $newAction->getAmount()
+        );
+
+        $rental->addAction($newAction);
+
+        return $action;
     }
 
 }

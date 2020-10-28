@@ -3,8 +3,12 @@
 namespace App\Entity;
 
 use App\Repository\RentalRepository;
+use Doctrine\Common\Collections\ArrayCollection;
+use Doctrine\Common\Collections\Collection;
 use Doctrine\ORM\Mapping as ORM;
+use PhpParser\Node\Expr\Cast\Array_;
 use Symfony\Component\Validator\Constraints as Assert;
+use Symfony\Component\Serializer\Annotation\Groups;
 
 /**
  * @ORM\Entity(repositoryClass=RentalRepository::class)
@@ -53,6 +57,16 @@ class Rental
      * @Assert\Positive
      */
     private $distance;
+
+    /**
+     * @ORM\OneToMany(targetEntity=Action::class, mappedBy="rental", orphanRemoval=true)
+     */
+    private $actions;
+
+    public function __construct()
+    {
+        $this->actions = new ArrayCollection();
+    }
 
     public function getId(): ?int
     {
@@ -110,6 +124,43 @@ class Rental
     public function setDistance(int $distance): self
     {
         $this->distance = $distance;
+
+        return $this;
+    }
+
+    /**
+     * @return Collection|Action[]
+     */
+    public function getActions(): Collection
+    {
+        return $this->actions;
+    }
+
+    public function addAction(Action $action): self
+    {
+        if (!$this->actions->contains($action)) {
+            $this->actions[] = $action;
+            $action->setRental($this);
+        }
+
+        return $this;
+    }
+
+    public function setActions(Array $actions): self
+    {
+        $this->actions = $actions;
+
+        return $this;
+    }
+
+    public function removeAction(Action $action): self
+    {
+        if ($this->actions->removeElement($action)) {
+            // set the owning side to null (unless already changed)
+            if ($action->getRental() === $this) {
+                $action->setRental(null);
+            }
+        }
 
         return $this;
     }
