@@ -1,5 +1,5 @@
 This repo is a technical test I did for a company where I was hired.
-This is a API using PHP symfony, The instructions are in the folder "level".
+This is a API using PHP symfony, The instructions are in the folder "levels".
 
 - For this test I made a symfony project exposing 5 endpoints. For each endpoint the data and the result were given.
 - A Postman collection is available to easily test all endpoints(./postman_collection.json).
